@@ -11,6 +11,7 @@ from torch_geometric.data import Dataset, Data, download_url
 class SparseMatrixDataset(Dataset):
     def __init__(self, root, name):
         self.dataset_name = name
+        self.root = root
         self.read_csv(root+"/csv/"+name+".csv")
         super(SparseMatrixDataset, self).__init__(root, None, None)
 
@@ -65,11 +66,11 @@ class SparseMatrixDataset(Dataset):
     
     @property
     def raw_paths(self):
-        return [f"./dataset/{self.dataset_name}/"]
+        return [self.root+f"/{self.dataset_name}/"]
     
     @property
     def processed_paths(self):
-        return [f"./pydataset/{self.dataset_name}/"]
+        return [self.root+f"../pydataset/{self.dataset_name}/"]
     
     @property
     def num_classes(self):
@@ -105,6 +106,11 @@ class SparseMatrixDataset(Dataset):
             torch.save(matrices_data, f"{self.processed_paths[0]}/{matrix_name}.pt")
 
     def process_matrix(self, raw_path, prod_nnz_density):
+        # if raw_path contains ./dataset, remove it
+        # temporary solution. TODO: generate dataset csv without dataset path prefix
+        if raw_path.startswith("./dataset"):
+            raw_path = self.root + raw_path[9:]
+
         with open(raw_path, "rb") as f:
             print("\tRead matrix from ", raw_path)
             lines = f.read().decode('utf-8').strip().split('\n')

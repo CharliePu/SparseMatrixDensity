@@ -7,7 +7,7 @@ import csv
 import os
 
 
-dataset_name = 'test2'
+dataset_name = 'matrices_more_distributions'
 dataset_path = './dataset/' + dataset_name
 total_matrices = 1000
 
@@ -81,7 +81,7 @@ if not os.path.exists('./dataset/csv'):
 
 with open('./dataset/csv/'+dataset_name+'.csv', mode='w') as dataset_file:
     dataset_writer = csv.writer(dataset_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-    dataset_writer.writerow(['timestamp', 'matrix 1 rows', 'matrix 1 cols', 'matrix 1 nnz', 'matrix 2 rows', 'matrix 2 cols', 'matrix 2 nnz', 'product rows', 'product cols', 'product nnz', 'product nnz density', 'matrix 1 path', 'matrix 2 path', 'product path'])
+    dataset_writer.writerow(['timestamp', 'matrix 1 rows', 'matrix 1 cols', 'matrix 1 nnz', 'matrix 1 nnz density', 'matrix 2 rows', 'matrix 2 cols', 'matrix 2 nnz', 'matrix 2 nnz density', 'product rows', 'product cols', 'product nnz', 'product nnz density', 'matrix 1 path', 'matrix 2 path', 'product path'])
     for entry in dataset_entries:
         dataset_writer.writerow(entry)
 

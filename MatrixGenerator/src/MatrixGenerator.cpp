@@ -51,11 +51,59 @@ struct DataSetEntry
     float m1_nn_density, m2_nn_density, product_nnz_density;
 };
 
+std::function<int64_t(std::default_random_engine &)> select_random_generator(std::default_random_engine &gen, int64_t min_val, int64_t max_val, std::string debug_name="")
+{
+    std::uniform_int_distribution<int> dist_type(0, 2);
+
+    std::cout<<debug_name<<": ";
+
+    switch (dist_type(gen))
+    {
+    case 0:
+    {
+        std::uniform_int_distribution<int64_t> dist(min_val, max_val);
+        std::cout << "Uniform Distribution: Min=" << min_val << ", Max=" << max_val << std::endl;
+        return [dist](std::default_random_engine &gen) mutable
+        { return dist(gen); };
+    }
+    case 1:
+    {
+        double mean = (max_val + min_val) / 2;
+        double stddev = (max_val - min_val) / 4;
+        std::normal_distribution<double> dist(mean, stddev);
+        std::cout << "Normal Distribution: Mean=" << mean << ", StdDev=" << stddev << std::endl;
+        return [dist, min_val, max_val](std::default_random_engine &gen) mutable
+        {
+            return std::max(min_val, std::min(max_val, static_cast<int64_t>(dist(gen))));
+        };
+    }
+    case 2:
+    {
+        // Calculate p based on covering 95% within the interval (not sure if this is correct)
+        double desired_coverage = 0.95;
+        double p = 1 - std::pow(1.0 - desired_coverage, 1.0 / (max_val - min_val + 1));
+
+        std::geometric_distribution<int64_t> dist(p);
+        std::cout << "Geometric Distribution: p=" << p << std::endl;
+        return [dist, min_val, max_val](std::default_random_engine &gen) mutable
+        {
+            return std::max(min_val, std::min(max_val, static_cast<int64_t>(dist(gen))));
+        };
+    }
+    }
+
+    std::cerr << "Invalid distribution type selected." << std::endl;
+    return nullptr;
+}
+
 Eigen::SparseMatrix<bool, 0, int64_t> generate_matrix(int64_t size, int64_t max_nnz, float nnz_sparsity, float row_sparsity, float col_sparsity, float diag_sparsity, bool symmetric)
 {
-
     std::random_device rd;
     std::default_random_engine gen(rd());
+
+    auto rows_gen = select_random_generator(gen, 0, size - 1, "row_gen");
+    auto cols_gen = select_random_generator(gen, 0, size - 1, "col_gen");
+    auto excluded_diags_gen = select_random_generator(gen, -size + 1, size - 1, "excluded_diags_gen");
 
     // Setup constraints
     std::unordered_set<int64_t> selected_rows_set;
@@ -66,7 +114,7 @@ Eigen::SparseMatrix<bool, 0, int64_t> generate_matrix(int64_t size, int64_t max_
         {
             break;
         }
-        selected_rows_set.insert(std::uniform_int_distribution<int64_t>(0, size - 1)(gen));
+        selected_rows_set.insert(rows_gen(gen));
     }
     std::vector<int64_t> selected_rows(selected_rows_set.begin(), selected_rows_set.end());
     std::cout << "Selected rows: " << selected_rows.size() << std::endl;
@@ -79,7 +127,7 @@ Eigen::SparseMatrix<bool, 0, int64_t> generate_matrix(int64_t size, int64_t max_
         {
             break;
         }
-        selected_cols_set.insert(std::uniform_int_distribution<int64_t>(0, size - 1)(gen));
+        selected_cols_set.insert(cols_gen(gen));
     }
     std::vector<int64_t> selected_cols(selected_cols_set.begin(), selected_cols_set.end());
     std::cout << "Selected cols: " << selected_cols.size() << std::endl;
@@ -92,7 +140,7 @@ Eigen::SparseMatrix<bool, 0, int64_t> generate_matrix(int64_t size, int64_t max_
         {
             break;
         }
-        excluded_diags.insert(std::uniform_int_distribution<int64_t>(-size + 1, size - 1)(gen));
+        excluded_diags.insert(excluded_diags_gen(gen));
     }
     std::cout << "Excluded diags: " << excluded_diags.size() << std::endl;
 
@@ -126,7 +174,7 @@ Eigen::SparseMatrix<bool, 0, int64_t> generate_matrix(int64_t size, int64_t max_
     }
 
     // Randomly remove some elements if there are too many
-    std::shuffle(all_elements.begin(), all_elements.end(), gen);
+    std::shuffle(all_elements.begin(), all_elements.end(), std::default_random_engine());
     max_nnz = std::min(max_nnz, std::min(static_cast<int64_t>(all_elements.size()), static_cast<int64_t>(size * size * (1.0 - nnz_sparsity))));
     all_elements.resize(max_nnz);
 

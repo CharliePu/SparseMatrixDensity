@@ -70,7 +70,7 @@ class SparseMatrixDataset(Dataset):
     
     @property
     def processed_paths(self):
-        return [self.root+f"../pydataset/{self.dataset_name}/"]
+        return [self.root+f"/../pydataset/{self.dataset_name}/"]
     
     @property
     def num_classes(self):

@@ -75,8 +75,29 @@ class GCN_NET(nn.Module):
         x = self.linear2(x)
         return x
 
-# Function to calculate model loss
-def calculate_loss(model, loader, device):
+def save_loss_curve(name, train_loss_values, val_loss_values):
+    plt.figure(figsize=(10, 6))
+    plt.plot(train_loss_values, label='Training Loss')
+    plt.plot(val_loss_values, label='Validation Loss')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.title('Training and Validation Loss Curve')
+    plt.legend()
+
+    dir = f"./imgs/loss/{dataset.dataset_name}"
+
+    if not os.path.exists(dir):
+        os.makedirs(dir)
+    
+    plt.savefig(f"{dir}/{name}")
+    plt.close()
+
+def biased_mse_loss(y_pred, y_true, underpred_cost=4, overpred_cost=1):
+    residuals = y_true - y_pred
+    loss = torch.where(residuals > 0, underpred_cost * (residuals ** 2), overpred_cost * (residuals ** 2))
+    return torch.mean(loss)
+
+def evaluate_loss(model, loader, device):
     model.eval()
     total_samples, total_loss = 0, 0
 
@@ -85,7 +106,9 @@ def calculate_loss(model, loader, device):
             batch["m1"].to(device)
             batch["m2"].to(device)
             out = model(batch)
-            loss = F.mse_loss(out, batch["prod_nnz_density"].to(device))
+            label = batch["prod_nnz_density"].to(device)
+#           loss = F.mse_loss(out, batch["prod_nnz_density"].to(device))
+            loss = biased_mse_loss(out, label)
 
             total_samples += batch["prod_nnz_density"].size(dim=0)
             total_loss += loss.item()
@@ -93,8 +116,15 @@ def calculate_loss(model, loader, device):
     return total_loss / len(loader)
 
 if __name__ == '__main__':
+    dataset_name = "matrices_more_distributions"
+
+    # Use first argument as dataset name, if any
+    if len(sys.argv) == 2:
+        print(f"Dataset name overwritten to {sys.argv[1]}")
+        dataset_name = sys.argv[1]
+
     # Load dataset
-    dataset = SparseMatrixDataset(root="./dataset", name="test")
+    dataset = SparseMatrixDataset(root="./dataset", name=dataset_name)
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Dataset info: Features={dataset.num_node_features}, Classes={dataset.num_classes}")
@@ -119,6 +149,8 @@ if __name__ == '__main__':
     train_loss_values, val_loss_values = [], []
     best_validation_loss = float('inf')
 
+    timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+
     # Training loop
     for epoch in tqdm(range(num_epochs), desc='Training', ncols=100):
         total_loss, total_samples = 0, 0
@@ -130,7 +162,7 @@ if __name__ == '__main__':
             batch["m1"].to(device)
             batch["m2"].to(device)
             out = model(batch)
-            loss = F.mse_loss(out, batch["prod_nnz_density"].to(device))
+            loss = biased_mse_loss(out, batch["prod_nnz_density"].to(device))
             
             total_samples += batch["prod_nnz_density"].size(dim=0)
             total_loss += loss.item()
@@ -142,7 +174,7 @@ if __name__ == '__main__':
         avg_loss = total_loss / len(train_loader)
         train_loss_values.append(avg_loss)
 
-        val_loss = calculate_loss(model, val_loader, device)
+        val_loss = evaluate_loss(model, val_loader, device)
         val_loss_values.append(val_loss)
 
         if val_loss < best_validation_loss:
@@ -151,7 +183,9 @@ if __name__ == '__main__':
 
         tqdm.write(f'Epoch: {epoch + 1}, Train Loss: {avg_loss:.4f}, Val Loss: {val_loss:.4f}')
 
-    timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+        # Save loss curves for every 50 epoches
+        if epoch % 50 == 0:
+            save_loss_curve(f"{timestamp}_intermediate_loss_curve.png", train_loss_values, val_loss_values)
 
     # Save best model & last model
     if not os.path.exists(f"./models/{dataset.dataset_name}"):
@@ -160,22 +194,8 @@ if __name__ == '__main__':
     torch.save(model.state_dict(), f"./models/{dataset.dataset_name}/{timestamp}_last_model.pth")
 
     # Final evaluation on test set
-    test_loss = calculate_loss(model, test_loader, device)
+    test_loss = evaluate_loss(model, test_loader, device)
     print(f'Test Loss: {test_loss:.4f}')
 
     # Save loss curves
-    plt.figure(figsize=(10, 6))
-    plt.plot(train_loss_values, label='Training Loss')
-    plt.plot(val_loss_values, label='Validation Loss')
-    plt.xlabel('Epoch')
-    plt.ylabel('Loss')
-    plt.title('Training and Validation Loss Curve')
-    plt.legend()
-
-    path = f"./imgs/loss/{dataset.dataset_name}"
-
-    if not os.path.exists(path):
-        os.makedirs(path)
-    
-    plt.savefig(f"{path}/{timestamp}_{test_loss:.4f}_loss_curve.png")
-    plt.close()
+    save_loss_curve("{timestamp}_{test_loss:.4f}_loss_curve.png", train_loss_values, val_loss_values)

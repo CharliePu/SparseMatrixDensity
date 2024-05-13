@@ -132,7 +132,7 @@ class SparseMatrixDataset(Dataset):
 
             edge_index = torch.tensor([row_indices, col_indices], dtype=torch.long)
 
-            num_nodes = int(rows)
+            num_nodes = max(int(rows), int(cols))
 
             # print out length
             print("edge_index length: ", edge_index.shape[1])
@@ -144,7 +144,6 @@ class SparseMatrixDataset(Dataset):
             node_features[:, 0::2] = torch.sin(pos / div_term)
             node_features[:, 1::2] = torch.cos(pos / div_term)
             x = node_features
-            print("x shape = {}".format(x.shape))
 
             y = torch.tensor([prod_nnz_density], dtype=torch.float)
 

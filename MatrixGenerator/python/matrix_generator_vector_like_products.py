@@ -1,6 +1,10 @@
+# Generate set of m1, m2, product matrices
+# All matrices are square matrices
+# m1 and m2 are vector-like(only one column/row contains non-zero elements).
+
 import sys
 sys.path.append('./MatrixGenerator/lib')
-from MatrixGenerator import generate_entry
+from MatrixGenerator import generate_entry_inner_product, generate_entry_outer_product
 
 import random
 import csv
@@ -13,33 +17,18 @@ total_matrices = 100
 
 # Random matrix combinations
 max_nnz = 20000
-nnz_density = [0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5]
-matrix_size = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000]
-row_sparsity = [0.0, 0.5, 0.9]
-col_sparsity = [0.0, 0.5, 0.9]
-diag_sparsity = [0.0, 0.5, 0.9]
-symmetric = [True, False]
+nnz_sparsity = [0.3, 0.5, 0.9, 0.99]
+matrix_size = [100, 200, 600, 1000]
 
 dataset_entries = []
 
 for i in range(total_matrices):
-    results = generate_entry(dataset_path, 
-                    random.choice(matrix_size), 
-                    1,
+    results = generate_entry_outer_product(dataset_path, 
                     random.choice(matrix_size),
-                    max_nnz,
                     # matrix 1
-                    random.choice(nnz_density), 
-                    random.choice(row_sparsity), 
-                    random.choice(col_sparsity), 
-                    random.choice(diag_sparsity), 
-                    random.choice(symmetric),
+                    random.choice(nnz_sparsity), 
                     # matrix 2
-                    random.choice(nnz_density),
-                    random.choice(row_sparsity),
-                    random.choice(col_sparsity),
-                    random.choice(diag_sparsity),
-                    random.choice(symmetric))
+                    random.choice(nnz_sparsity))
     
     timestamp = results[0]
     m1_path = results[1]
@@ -80,33 +69,19 @@ total_matrices = 100
 
 # Random matrix combinations
 max_nnz = 20000
-nnz_density = [0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5]
-matrix_size = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000]
-row_sparsity = [0.0, 0.5, 0.9]
-col_sparsity = [0.0, 0.5, 0.9]
-diag_sparsity = [0.0, 0.5, 0.9]
-symmetric = [True, False]
+nnz_sparsity = [0.3, 0.5, 0.9, 0.99]
+matrix_size = [100, 200, 600, 1000]
 
 dataset_entries = []
 
 for i in range(total_matrices):
-    results = generate_entry(dataset_path, 
-                    1,
+    results = generate_entry_inner_product(dataset_path, 
                     random.choice(matrix_size),
-                    1,
-                    max_nnz,
                     # matrix 1
-                    random.choice(nnz_density), 
-                    random.choice(row_sparsity), 
-                    random.choice(col_sparsity), 
-                    random.choice(diag_sparsity), 
-                    random.choice(symmetric),
+                    random.choice(nnz_sparsity), 
                     # matrix 2
-                    random.choice(nnz_density),
-                    random.choice(row_sparsity),
-                    random.choice(col_sparsity),
-                    random.choice(diag_sparsity),
-                    random.choice(symmetric))
+                    random.choice(nnz_sparsity))
+    
     
     timestamp = results[0]
     m1_path = results[1]

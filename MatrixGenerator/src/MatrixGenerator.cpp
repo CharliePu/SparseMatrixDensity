@@ -8,7 +8,6 @@
 #include <string>
 #include <fstream>
 #include <chrono>
-#include <unordered_set>
 
 #include <boost/python.hpp>
 #include <Eigen/SparseCore>
@@ -19,7 +18,8 @@ std::string current_timestamp()
 {
     auto now = std::chrono::system_clock::now();
     auto seconds_since_epoch = std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count();
-    return std::to_string(seconds_since_epoch);
+    auto random_number = std::rand() % 1000;
+    return std::to_string(seconds_since_epoch) + std::to_string(random_number);
 }
 
 bool save_matrix(std::filesystem::path path, const Eigen::SparseMatrix<bool, 0, int64_t> &matrix)
@@ -48,7 +48,7 @@ bool save_matrix(std::filesystem::path path, const Eigen::SparseMatrix<bool, 0, 
 struct DataSetEntry
 {
     Eigen::SparseMatrix<bool, 0, int64_t> m1, m2, prod;
-    float m1_nn_density, m2_nn_density, product_nnz_density;
+    float m1_nnz_density, m2_nnz_density, product_nnz_density;
 };
 
 std::function<int64_t(std::default_random_engine &)> select_random_generator(std::default_random_engine &gen, int64_t min_val, int64_t max_val, std::string debug_name="")
@@ -96,7 +96,7 @@ std::function<int64_t(std::default_random_engine &)> select_random_generator(std
     return nullptr;
 }
 
-Eigen::SparseMatrix<bool, 0, int64_t> generate_matrix(int64_t rows, int64_t cols, int64_t max_nnz, float nnz_sparsity, float row_sparsity, float col_sparsity, float diag_sparsity, bool symmetric)
+Eigen::SparseMatrix<bool, 0, int64_t> generate_matrix_helper(int64_t rows, int64_t cols, int64_t max_nnz, float nnz_sparsity, float row_sparsity, float col_sparsity, float diag_sparsity, bool symmetric, int recursion_count)
 {
     std::random_device rd;
     std::default_random_engine gen(rd());
@@ -179,7 +179,12 @@ Eigen::SparseMatrix<bool, 0, int64_t> generate_matrix(int64_t rows, int64_t cols
     // If no elements are selected, lose the constraints and try again
     if (all_elements.size() == 0)
     {
-        return generate_matrix(rows, cols, max_nnz, nnz_sparsity * 0.9, row_sparsity * 0.9, col_sparsity * 0.9, diag_sparsity * 0.9, symmetric);
+        if (recursion_count > 10)
+        {
+            std::cerr << "Failed to generate matrix after 10 attempts." << std::endl;
+            return Eigen::SparseMatrix<bool, 0, int64_t>(rows, cols);
+        }
+        return generate_matrix_helper(rows, cols, max_nnz, nnz_sparsity * 0.9, row_sparsity * 0.9, col_sparsity * 0.9, diag_sparsity * 0.9, symmetric, recursion_count + 1);
     }
 
     // Randomly remove some elements if there are too many
@@ -201,11 +206,11 @@ Eigen::SparseMatrix<bool, 0, int64_t> generate_matrix(int64_t rows, int64_t cols
 
     std::cout << "Matrix generated with size " << rows << "x" << cols << " and " << max_nnz << " non-zero elements." << std::endl<<std::endl;
 
-    // Print a few elements
-    for (int i = 0; i < std::min(10l, static_cast<int64_t>(triplets.size())); i++)
-    {
-        std::cout << "Element " << i << ": (" << triplets[i].row() << ", " << triplets[i].col() << ")" << std::endl;
-    }
+    // // Print a few elements
+    // for (int i = 0; i < std::min(10l, static_cast<int64_t>(triplets.size())); i++)
+    // {
+    //     std::cout << "Element " << i << ": (" << triplets[i].row() << ", " << triplets[i].col() << ")" << std::endl;
+    // }
 
     // Create matrix instance
     Eigen::SparseMatrix<bool, 0, int64_t> matrix(rows, cols);
@@ -214,19 +219,62 @@ Eigen::SparseMatrix<bool, 0, int64_t> generate_matrix(int64_t rows, int64_t cols
     return matrix;
 }
 
-DataSetEntry generate_entry_helper(int64_t m1_rows, int64_t m1_cols_and_m2_rows, int64_t m2_cols, int64_t max_nnz,
-                                   float m1_nnz_sparsity, float m1_row_sparsity, float m1_col_sparsity, float m1_diag_sparsity, bool m1_symmetric,
+Eigen::SparseMatrix<bool, 0, int64_t> generate_matrix(int64_t rows, int64_t cols, int64_t max_nnz, float nnz_sparsity, float row_sparsity, float col_sparsity, float diag_sparsity, bool symmetric)
+{
+    return generate_matrix_helper(rows, cols, max_nnz, nnz_sparsity, row_sparsity, col_sparsity, diag_sparsity, symmetric, 0);
+}
 
-                                   float m2_nnz_sparsity, float m2_row_sparsity, float m2_col_sparsity, float m2_diag_sparsity, bool m2_symmetric)
+Eigen::SparseMatrix<bool, 0, int64_t> generate_matrix_one_row(int64_t size, int64_t max_nnz, float nnz_sparsity)
+{
+    auto engine = std::default_random_engine{};
+    std::bernoulli_distribution dist(1.0 - nnz_sparsity);
+    
+    std::vector<Eigen::Triplet<bool, int64_t>> triplets;
+    for (int64_t i = 0; i < size; i++)
+    {
+        if (dist(engine))
+        {
+            triplets.emplace_back(0, i, 1);
+        }
+    }
+
+    Eigen::SparseMatrix<bool, 0, int64_t> matrix(size, size);
+    matrix.setFromTriplets(triplets.begin(), triplets.end());
+
+    return matrix;
+}
+
+Eigen::SparseMatrix<bool, 0, int64_t> generate_matrix_one_col(int64_t size, int64_t max_nnz, float nnz_sparsity)
+{
+    auto engine = std::default_random_engine{};
+    std::bernoulli_distribution dist(1.0 - nnz_sparsity);
+    
+    std::vector<Eigen::Triplet<bool, int64_t>> triplets;
+    for (int64_t i = 0; i < size; i++)
+    {
+        if (!dist(engine))
+        {
+            triplets.emplace_back(i, 0, 1);
+        }
+    }
+
+    Eigen::SparseMatrix<bool, 0, int64_t> matrix(size, size);
+    matrix.setFromTriplets(triplets.begin(), triplets.end());
+
+    return matrix;
+}
+
+
+DataSetEntry generate_entry_helper(int64_t m1_rows, int64_t m1_cols_and_m2_rows, int64_t m2_cols, 
+                                    const std::function<Eigen::SparseMatrix<bool, 0, int64_t>()> &m1_matrix_generator,
+                                    const std::function<Eigen::SparseMatrix<bool, 0, int64_t>()> &m2_matrix_generator)
 {
     DataSetEntry entry;
-    entry.m1 = generate_matrix(m1_rows, m1_cols_and_m2_rows, max_nnz, m1_nnz_sparsity, m1_row_sparsity, m1_col_sparsity, m1_diag_sparsity, m1_symmetric);
-    entry.m2 = generate_matrix(m1_cols_and_m2_rows, m2_cols, max_nnz, m2_nnz_sparsity, m2_row_sparsity, m2_col_sparsity, m2_diag_sparsity, m2_symmetric);
+    entry.m1 = m1_matrix_generator();
+    entry.m2 = m2_matrix_generator();
 
-    entry.m1_nn_density = static_cast<float>(entry.m1.nonZeros()) / (m1_rows * m1_cols_and_m2_rows);
-    entry.m2_nn_density = static_cast<float>(entry.m2.nonZeros()) / (m1_cols_and_m2_rows * m2_cols);
-
-    Eigen::SparseMatrix<bool, 0, int64_t> m1_dense(entry.m1), m2_dense(entry.m2);
+    entry.m1_nnz_density = static_cast<float>(entry.m1.nonZeros()) / (m1_rows * m1_cols_and_m2_rows);
+    entry.m2_nnz_density = static_cast<float>(entry.m2.nonZeros()) / (m1_cols_and_m2_rows * m2_cols);
 
     entry.prod = entry.m1 * entry.m2;
 
@@ -235,31 +283,30 @@ DataSetEntry generate_entry_helper(int64_t m1_rows, int64_t m1_cols_and_m2_rows,
     return entry;
 }
 
-boost::python::tuple generate_entry(std::string path, int64_t m1_rows, int64_t m1_cols_and_m2_rows, int64_t m2_cols, int64_t max_nnz,
-                                    float m1_nnz_sparsity, float m1_row_sparsity, float m1_col_sparsity, float m1_diag_sparsity, bool m1_symmetric,
-                                    float m2_nnz_sparsity, float m2_row_sparsity, float m2_col_sparsity, float m2_diag_sparsity, bool m2_symmetric)
+boost::python::tuple generate_entry(std::string path, int64_t m1_rows, int64_t m1_cols_and_m2_rows, int64_t m2_cols,
+                                    const std::function<Eigen::SparseMatrix<bool, 0, int64_t>()> &m1_matrix_generator,
+                                    const std::function<Eigen::SparseMatrix<bool, 0, int64_t>()> &m2_matrix_generator)
 {
     // Create paths if not exist
     std::filesystem::create_directories(path);
 
-    auto entry = generate_entry_helper(m1_rows, m1_cols_and_m2_rows, m2_cols, max_nnz, m1_nnz_sparsity, m1_row_sparsity, m1_col_sparsity, m1_diag_sparsity, m1_symmetric,
-                                       m2_nnz_sparsity, m2_row_sparsity, m2_col_sparsity, m2_diag_sparsity, m2_symmetric);
+    auto entry = generate_entry_helper(m1_rows, m1_cols_and_m2_rows, m2_cols, m1_matrix_generator, m2_matrix_generator);
 
     std::string timestamp = current_timestamp();
 
-    std::filesystem::path m1_path = path + "/" + current_timestamp() + "_m1.mtx";
+    std::filesystem::path m1_path = path + "/" + timestamp + "_m1.mtx";
     if (!save_matrix(m1_path, entry.m1))
     {
         std::cerr << "Failed to save matrix 1 to " << m1_path << std::endl;
     }
 
-    std::filesystem::path m2_path = path + "/" + current_timestamp() + "_m2.mtx";
+    std::filesystem::path m2_path = path + "/" + timestamp + "_m2.mtx";
     if (!save_matrix(m2_path, entry.m2))
     {
         std::cerr << "Failed to save matrix 2 to " << m2_path << std::endl;
     }
 
-    std::filesystem::path product_path = path + "/" + current_timestamp() + "_product.mtx";
+    std::filesystem::path product_path = path + "/" + timestamp + "_product.mtx";
     if (!save_matrix(product_path, entry.prod))
     {
         std::cerr << "Failed to save product to " << product_path << std::endl;
@@ -282,8 +329,62 @@ boost::python::tuple generate_entry(std::string path, int64_t m1_rows, int64_t m
         entry.product_nnz_density);
 }
 
+boost::python::tuple generate_entry_rectangle_matrices(std::string path, int64_t m1_rows, int64_t m1_cols_and_m2_rows, int64_t m2_cols, int64_t max_nnz, 
+                                    float m1_nnz_sparsity, float m1_row_sparsity, float m1_col_sparsity, float m1_diag_sparsity, bool m1_symmetric,
+                                    float m2_nnz_sparsity, float m2_row_sparsity, float m2_col_sparsity, float m2_diag_sparsity, bool m2_symmetric)
+{
+    auto m1_generator = [=]() { 
+        return generate_matrix(m1_rows, m1_cols_and_m2_rows, max_nnz, m1_nnz_sparsity, m1_row_sparsity, m1_col_sparsity, m1_diag_sparsity, m1_symmetric);
+    };
+    auto m2_generator = [=]() {
+        return generate_matrix(m1_cols_and_m2_rows, m2_cols, max_nnz, m2_nnz_sparsity, m2_row_sparsity, m2_col_sparsity, m2_diag_sparsity, m2_symmetric);
+    };
+
+    return generate_entry(path, m1_rows,m1_cols_and_m2_rows, m2_cols, m1_generator, m2_generator);
+}
+
+
+boost::python::tuple generate_entry_square_matrices(std::string path, int64_t size, int64_t max_nnz,
+                                    float m1_nnz_sparsity, float m1_row_sparsity, float m1_col_sparsity, float m1_diag_sparsity, bool m1_symmetric,
+                                    float m2_nnz_sparsity, float m2_row_sparsity, float m2_col_sparsity, float m2_diag_sparsity, bool m2_symmetric)
+{
+    return generate_entry_rectangle_matrices(path, size, size, size, max_nnz, 
+                                    m1_nnz_sparsity, m1_row_sparsity, m1_col_sparsity, m1_diag_sparsity, m1_symmetric,
+                                    m2_nnz_sparsity, m2_row_sparsity, m2_col_sparsity, m2_diag_sparsity, m2_symmetric);
+}
+
+boost::python::tuple generate_entry_inner_product(std::string path, int64_t size, float m1_nnz_sparsity, float m2_nnz_sparsity)
+{
+    auto m1_generator = [=]() { 
+        return generate_matrix_one_row(size, size, m1_nnz_sparsity);
+    };
+
+    auto m2_generator = [=]() {
+        return generate_matrix_one_col(size, size, m2_nnz_sparsity);
+    };
+
+    return generate_entry(path, size, size, size, m1_generator, m2_generator);
+} 
+
+boost::python::tuple generate_entry_outer_product(std::string path, int64_t size, float m1_nnz_sparsity, float m2_nnz_sparsity)
+{
+    auto m1_generator = [=]() { 
+        return generate_matrix_one_col(size, size, m1_nnz_sparsity);
+    };
+
+    auto m2_generator = [=]() {
+        return generate_matrix_one_row(size, size, m2_nnz_sparsity);
+    };
+
+    return generate_entry(path, size, size, size, m1_generator, m2_generator);
+}
+
 BOOST_PYTHON_MODULE(MatrixGenerator)
 {
     using namespace boost::python;
-    def("generate_entry", generate_entry);
+    def("generate_entry", generate_entry_rectangle_matrices);
+    def("generate_entry_rectangle_matrices", generate_entry_rectangle_matrices);
+    def("generate_entry_square_matrices", generate_entry_square_matrices);
+    def("generate_entry_inner_product", generate_entry_inner_product);
+    def("generate_entry_outer_product", generate_entry_outer_product);
 }

@@ -1,6 +1,6 @@
 import sys
 sys.path.append('./MatrixGenerator/lib')
-from MatrixGenerator import generate_entry
+from MatrixGenerator import generate_entry_square_matrices
 
 import random
 import csv
@@ -23,7 +23,7 @@ symmetric = [True, False]
 dataset_entries = []
 
 for i in range(total_matrices):
-    results = generate_entry(dataset_path, 
+    results = generate_entry_square_matrices(dataset_path, 
                     random.choice(matrix_size), 
                     max_nnz,
                     # matrix 1

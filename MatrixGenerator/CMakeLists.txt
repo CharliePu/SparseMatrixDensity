@@ -10,12 +10,19 @@ find_package(Boost COMPONENTS system python3 REQUIRED)
 find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
 
 # MatrixGenerator
-add_library(MatrixGenerator MODULE src/MatrixGenerator.cpp)
+add_library(MatrixGenerator MODULE 
+src/MatrixGenerator.cpp
+src/EntryGenerator.cpp
+src/Utilities.cpp
+src/MatrixGeneratorModule.cpp
+)
+
 target_link_libraries(MatrixGenerator PUBLIC ${Boost_LIBRARIES} ${Python3_LIBRARIES})
 
 # Include directories
 target_include_directories(MatrixGenerator PRIVATE 
 ${CMAKE_SOURCE_DIR}/include
+${CMAKE_SOURCE_DIR}/src
 ${Boost_INCLUDE_DIRS}
 ${Python3_INCLUDE_DIRS}
 )

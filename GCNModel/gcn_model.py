@@ -73,6 +73,7 @@ class GCN_NET(nn.Module):
         x = self.linear1(x)
         x = F.relu(x)
         x = self.linear2(x)
+        x = F.tanh(x)+0.5
         return x
 
 def save_loss_curve(name, train_loss_values, val_loss_values):
@@ -116,7 +117,7 @@ def evaluate_loss(model, loader, device):
     return total_loss / len(loader)
 
 if __name__ == '__main__':
-    dataset_name = "matrices_more_distributions"
+    dataset_name = "merged_dataset"
 
     # Use first argument as dataset name, if any
     if len(sys.argv) == 2:
@@ -138,6 +139,7 @@ if __name__ == '__main__':
     num_training, num_validation = int(num_graphs * 0.7), int(num_graphs * 0.15)
     num_test = num_graphs - num_training - num_validation
     training_dataset, validation_dataset, test_dataset = torch.utils.data.random_split(dataset, [num_training, num_validation, num_test])
+    print(f"Training: {num_training}, Validation: {num_validation}, Test: {num_test}")
 
     train_loader = DataLoader(training_dataset, batch_size=2, shuffle=True)
     val_loader = DataLoader(validation_dataset, batch_size=2)
@@ -145,7 +147,7 @@ if __name__ == '__main__':
 
     # Training setup
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
-    num_epochs = 1
+    num_epochs = 500
     train_loss_values, val_loss_values = [], []
     best_validation_loss = float('inf')
 
@@ -186,6 +188,11 @@ if __name__ == '__main__':
         # Save loss curves for every 50 epoches
         if epoch % 50 == 0:
             save_loss_curve(f"{timestamp}_intermediate_loss_curve.png", train_loss_values, val_loss_values)
+
+        # Save best model for every 10 epoches
+        if not os.path.exists(f"./models/{dataset.dataset_name}"):
+            os.makedirs(f"./models/{dataset.dataset_name}")
+        torch.save(best_model, f"./models/{dataset.dataset_name}/{timestamp}_best_model.pth")
 
     # Save best model & last model
     if not os.path.exists(f"./models/{dataset.dataset_name}"):

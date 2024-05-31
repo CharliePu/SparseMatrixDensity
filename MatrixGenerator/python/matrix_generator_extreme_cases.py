@@ -1,57 +1,40 @@
+# Generate set of m1, m2, product matrices
+# where m1 and m2 are vectors (1xN or Nx1 dimensions matrices)
+# and product is the inner product/outer product of the two vectors
+
 import sys
 sys.path.append('./MatrixGenerator/lib')
-from MatrixGenerator import generate_entry_square_matrices
+from MatrixGenerator import generate_entry_extreme_cases
 
 import random
 import csv
 import os
 
 
-dataset_name = 'wider_range'
+dataset_name = 'extreme_cases'
 dataset_path = './dataset/' + dataset_name
-total_matrices = 5000
+total_matrices = 1000
 
 # Random matrix combinations
-max_nnz = 100000
-matrix_size_range = [1.8, 3.5]
-nnz_sparsity_range = [-10.0, 0.0]
-row_sparsity_range = [-10.0, 0.0]
-col_sparsity_range = [-10.0, 0.0]
-diag_sparsity_range = [-10.0, 0.0]
-symmetric = [True, False]
+max_nnz = 20000
+nnz_sparsity = [0.0001, 0.01, 0.05, 0.1, 0.2]
+matrix_size = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000]
+row_col_sparsity = [0.5, 0.7, 0.9, 0.99, 0.999]
 
 dataset_entries = []
 
 for i in range(total_matrices):
-    matrix_size = 10 ** random.uniform(matrix_size_range[0], matrix_size_range[1])
-
-    nnz_sparsity_1 = 1.0 - 10 ** random.uniform(nnz_sparsity_range[0], nnz_sparsity_range[1])
-    row_sparsity_1 = 1.0 - 10.0 ** random.uniform(row_sparsity_range[0], row_sparsity_range[1])
-    col_sparsity_1 = 1.0 - 10.0 ** random.uniform(col_sparsity_range[0], col_sparsity_range[1])
-    diag_sparsity_1 = 1.0 - 10.0 ** random.uniform(diag_sparsity_range[0], diag_sparsity_range[1])
-
-    nnz_sparsity_2 = 1.0 - 10.0 ** random.uniform(nnz_sparsity_range[0], nnz_sparsity_range[1])
-    row_sparsity_2 = 1.0 - 10.0 ** random.uniform(row_sparsity_range[0], row_sparsity_range[1])
-    col_sparsity_2 = 1.0 - 10.0 ** random.uniform(col_sparsity_range[0], col_sparsity_range[1])
-    diag_sparsity_2 = 1.0 - 10.0 ** random.uniform(diag_sparsity_range[0], diag_sparsity_range[1])
-
-    results = generate_entry_square_matrices(dataset_path, 
-                    int(matrix_size),
+    size = random.choice(matrix_size)
+    results = generate_entry_extreme_cases(dataset_path, 
+                    size,
                     max_nnz,
                     # matrix 1
-                    nnz_sparsity_1,
-                    row_sparsity_1,
-                    col_sparsity_1,
-                    diag_sparsity_1,
-                    random.choice(symmetric),
+                    random.choice(nnz_sparsity), 
+                    random.choice(row_col_sparsity), 
                     # matrix 2
-                    nnz_sparsity_2,
-                    row_sparsity_2,
-                    col_sparsity_2,
-                    diag_sparsity_2,
-                    random.choice(symmetric))
+                    random.choice(nnz_sparsity),
+                    random.choice(row_col_sparsity))
     
-
     timestamp = results[0]
     m1_path = results[1]
     m1_rows = results[2]
@@ -85,6 +68,3 @@ with open('./dataset/csv/'+dataset_name+'.csv', mode='w') as dataset_file:
         dataset_writer.writerow(entry)
 
 print('Done!')
-
-
-    
